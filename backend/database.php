@@ -2,7 +2,7 @@
 
 function db_connect(): mysqli
 {
-	$configPath = __DIR__ . '/config.php';
+	$configPath = dirname(__DIR__) . '/config.php';
 
 	if (!file_exists($configPath)) {
 		die('Missing config.php. Copy config.example.php to config.php and update your database settings.');

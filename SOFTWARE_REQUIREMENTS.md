@@ -50,7 +50,7 @@ If XAMPP does not install correctly from the terminal, install it from the offic
 php -S 127.0.0.1:8000
 ```
 
-5. Visit `http://127.0.0.1:8000/login.php`.
+5. Visit `http://127.0.0.1:8000/frontend/login.php`.
 
 ## GitHub Upload
 

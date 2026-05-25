@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once __DIR__ . '/database.php';
+require_once __DIR__ . '/../backend/database.php';
 
 if (!isset($_SESSION['user'])) {
 	header("Location: login.php?redirect=report");
