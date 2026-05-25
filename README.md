@@ -4,6 +4,8 @@ This is a PHP/MySQL internship project for learning secure web application devel
 
 ## Setup
 
+Install the tools listed in `SOFTWARE_REQUIREMENTS.md`, then:
+
 1. Copy `config.example.php` to `config.php`.
 2. Update `config.php` with local MySQL credentials.
 3. Import `schema.sql` into MySQL to create the `mysite` database and required tables.
