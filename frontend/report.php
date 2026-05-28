@@ -1,5 +1,21 @@
 <?php
 session_start();
+
+// Session timeout after 10 minutes
+$timeout_duration = 600;
+if (isset($_SESSION['last_activity'])) {
+	if ((time() - $_SESSION['last_activity']) > $timeout_duration) {
+
+		session_unset();
+		session_destroy();
+
+		header("Location: login.php?timeout=1");
+		exit();
+	}
+}
+// Update last activity time
+$_SESSION['last_activity'] = time();
+
 require_once __DIR__ . '/../backend/database.php';
 
 if (!isset($_SESSION['user'])) {
@@ -18,6 +34,7 @@ $payroll_id = isset($_GET['payroll_id']) ? intval($_GET['payroll_id']) : 0;
 $result = $conn->query("SELECT id, payroll_name FROM payrolls");
 
 if (isset($_POST['export'])) {
+	log_action($conn, $_SESSION['user'], "Exported payroll report");
 	header("Content-Type: application/vnd.ms-excel");
 	header("Content-Disposition: attachment; filename=report.xls");
 
@@ -112,11 +129,11 @@ if (!$result) {
 </tr>
 <?php while($row = $result->fetch_assoc()) { ?>
 <tr>
-	<td><?php echo $row['matricule']; ?></td>
-	<td><?php echo $row['name']; ?></td>
-	<td><?php echo $row['amount']; ?></td>
-	<td><?php echo $row['status']; ?></td>
-	<td><?php echo $row['paid_by']; ?></td>
+	<td><?php echo htmlspecialchars($row['matricule']); ?></td>
+	<td><?php echo htmlspecialchars($row['name']); ?></td>
+	<td><?php echo htmlspecialchars($row['amount']); ?></td>
+	<td><?php echo htmlspecialchars($row['status']); ?></td>
+	<td><?php echo htmlspecialchars($row['paid_by']); ?></td>
 	<td>
 	<?php
 	echo !empty($row['payment_date']) ? $row['payment_date'] : '-';

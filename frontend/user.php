@@ -1,9 +1,25 @@
 <?php
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-
 session_start();
 
+// Session timeout after 10 minutes
+$timeout_duration = 600;
+if (isset($_SESSION['last_activity'])) {
+	if ((time() - $_SESSION['last_activity']) > $timeout_duration) {
+
+		session_unset();
+		session_destroy();
+
+		header("Location: login.php?timeout=1");
+		exit();
+	}
+}
+// Update last activity time
+$_SESSION['last_activity'] = time();
+
+if (!isset($_SESSION['role'])) {
+    header("Location: login.php");
+    exit();
+}
 require_once __DIR__ . '/../backend/database.php';
 
 $conn = db_connect();
@@ -13,8 +29,13 @@ if (isset($_GET['undo'])) {
 	$customer_id = intval($_GET['undo']);
 	$payroll_id = intval($_GET['payroll_id']);
 
-	$conn->query("UPDATE customers SET status='unpaid' WHERE id=$customer_id");
-	$conn->query("DELETE FROM payments WHERE customer_id=$customer_id");
+	$stmt = $conn->prepare("UPDATE customers SET status='unpaid' WHERE id=?");
+	$stmt->bind_param("i", $customer_id);
+	$stmt->execute();
+	log_action($conn, $_SESSION['user'], "Undo payment for customer ID: " . $customer_id);
+	$stmt = $conn->prepare("DELETE FROM payments WHERE customer_id=?");
+	$stmt->bind_param("i", $customer_id);
+	$stmt->execute();
 
 	header("Location: user.php?payroll_id=" . $payroll_id);
 	exit();
@@ -30,7 +51,11 @@ if (isset($_GET['pay'])) {
 	$customer_id = intval($_GET['pay']);
 	$user = $_SESSION['user'];
 
-	$conn->query("UPDATE customers SET status='paid' WHERE id=$customer_id");
+	$stmt = $conn->prepare("UPDATE customers SET status='paid' WHERE id=?");
+	$stmt->bind_param("i", $customer_id);
+	$stmt->execute();
+
+	log_action($conn, $user, "Marked payment for customer ID: " . $customer_id);
 
 	$stmt = $conn->prepare("INSERT INTO payments (customer_id, paid_by, payment_date) VALUES (?, ?, NOW())");
 
@@ -42,7 +67,9 @@ $check = $conn->prepare("SELECT id FROM payments WHERE customer_id=?");
 $check->bind_param("i", $customer_id);
 $check->execute();
 $res = $check->get_result();
-
+if ($res->num_rows > 0) {
+	die("Payment already exists for this employee");
+}
 	$stmt->bind_param("is", $customer_id, $user);
 	$stmt->execute();
 
@@ -133,10 +160,10 @@ if ($customers && $customers->num_rows > 0) {
 	while ($row = $customers->fetch_assoc()) {
 ?>
 <tr>
-	<td><?php echo $row['matricule']; ?></td>
-	<td><?php echo $row['name']; ?></td>
-	<td><?php echo $row['amount']; ?></td>
-	<td><?php echo $row['status']; ?></td>
+	<td><?php echo htmlspecialchars($row['matricule']); ?></td>
+	<td><?php echo htmlspecialchars($row['name']); ?></td>
+	<td><?php echo htmlspecialchars($row['amount']); ?></td>
+	<td><?php echo htmlspecialchars($row['status']); ?></td>
  	<td>
 	<?php if ($row['status'] == 'unpaid') { ?>
 		<a href="?pay=<?php echo $row['id']; ?>&payroll_id=<?php echo $payroll_id ?>">

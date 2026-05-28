@@ -22,3 +22,11 @@ function db_connect(): mysqli
 
 	return $conn;
 }
+
+function log_action($conn, $username, $action) {
+    $ip = $_SERVER['REMOTE_ADDR'];
+
+    $stmt = $conn->prepare("INSERT INTO audit_logs (username, action, ip_address) VALUES (?, ?, ?)");
+    $stmt->bind_param("sss", $username, $action, $ip);
+    $stmt->execute();
+}
