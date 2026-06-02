@@ -1,6 +1,19 @@
 <?php
 session_start();
 
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    if (
+        !isset($_POST['csrf_token']) ||
+        $_POST['csrf_token'] !== $_SESSION['csrf_token']
+    ) {
+        die("Invalid CSRF token");
+    }
+
+}
 // Session timeout after 10 minutes
 $timeout_duration = 600;
 if (isset($_SESSION['last_activity'])) {
@@ -16,7 +29,10 @@ if (isset($_SESSION['last_activity'])) {
 // Update last activity time
 $_SESSION['last_activity'] = time();
 
-if (!isset($_SESSION['role'])) {
+if (
+    !isset($_SESSION['user']) ||
+    !isset($_SESSION['role'])
+) {
     header("Location: login.php");
     exit();
 }
@@ -25,8 +41,8 @@ require_once __DIR__ . '/../backend/database.php';
 $conn = db_connect();
 
 
-if (isset($_GET['undo'])) {
-	$customer_id = intval($_GET['undo']);
+if (isset($_POST['undo'])) {
+	$customer_id = intval($_POST['customer_id']);
 	$payroll_id = intval($_GET['payroll_id']);
 
 	$stmt = $conn->prepare("UPDATE customers SET status='unpaid' WHERE id=?");
@@ -46,9 +62,9 @@ $payroll_id = isset($_GET['payroll_id']) ? intval($_GET['payroll_id']) : 0;
 
 $search = isset($_GET['search']) ? $_GET['search'] : '';
 
-if (isset($_GET['pay'])) {
+if (isset($_POST['pay'])) {
 
-	$customer_id = intval($_GET['pay']);
+	$customer_id = intval($_POST['customer_id']);
 	$user = $_SESSION['user'];
 
 	$stmt = $conn->prepare("UPDATE customers SET status='paid' WHERE id=?");
@@ -106,7 +122,7 @@ $payroll = $conn->query("
 
 <div class="container">
 
-<h1>Welcome <?php echo $user; ?></h1>
+<h1>Welcome <?php echo htmlspecialchars($user); ?></h1>
 
 <h2>Selct Payroll</h2>
 
@@ -166,14 +182,44 @@ if ($customers && $customers->num_rows > 0) {
 	<td><?php echo htmlspecialchars($row['status']); ?></td>
  	<td>
 	<?php if ($row['status'] == 'unpaid') { ?>
-		<a href="?pay=<?php echo $row['id']; ?>&payroll_id=<?php echo $payroll_id ?>">
-			<button>PAY</button>
-		</a>
+		
+		<form method="POST">
+		<input type="hidden"
+			name="csrf_token"
+			value="<?php echo $_SESSION['csrf_token']; ?>">
+		<input type="hidden"
+			name="customer_id"
+			value="<?php echo $row['id']; ?>">
+		<input type="hidden"
+			name="payroll_id"
+			value="<?php echo $payroll_id; ?>">
+		<button type="submit" name="pay">
+			PAY
+		</button>
+		</form>
+
 	<?php } else { ?>
 		<?php if ($_SESSION['role'] == 'admin') { ?>
-		<a href="?undo=<?php echo $row['id']; ?>&payroll_id=<?php echo $payroll_id; ?>" onclick="return confirm('Undo this payment?')">
-			<button style="background:red;">Undo</button>
-		</a>
+		
+		<form method="POST">
+		<input type="hidden"
+			name="csrf_token"
+			value="<?php echo $_SESSION['csrf_token']; ?>">
+		<input type="hidden"
+			name="customer_id"
+			value="<?php echo $row['id']; ?>">
+		<input type="hidden"
+			name="payroll_id"
+			value="<?php echo $payroll_id; ?>">
+		<button
+			type="submit"
+			name="undo"
+			style="background:red;"
+			onclick="return confirm('Undo this payment?')">
+			Undo
+		</button>
+		</form>
+
 	<?php } else { ?>
 		<span style="color:gray;">Paid</span>
 	<?php } ?>
@@ -205,32 +251,25 @@ if ($_SESSION['role'] == 'admin') {
 </form>
 
 </div>
-<script>
-window.onload = function () {
-	let searchInput = document.getElementById("search");
-	if (!searchInput) {
-		console.log("Search input NOT found");
-		return;
-	}
-searchInput.addEventListener("keyup", function () {
-
-	let value = this.value.toLowerCase();
-	let rows = document.querySelectorAll("#tableBody tr");
-
-	row.forEach(function(row) {
-		let text = row.textContent.toLowerCase();
-
-		row.style.display = text.includes(value) ? "" : "none";
-	});
-)};
-};
-</script>
-<script>
-let row = document.querySelector("tr[style='']");
-let (row) {
-	row.scrollIntoview({ behavior: "smooth", block: "center"});
-}
-</script>
-
 </body>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const searchInput = document.getElementById("search");
+    if (!searchInput) {
+        return;
+    }
+    searchInput.addEventListener("keyup", function () {
+        const value = this.value.toLowerCase();
+        const rows = document.querySelectorAll("#tableBody tr");
+        rows.forEach(function(row) {
+            const text = row.textContent.toLowerCase();
+            if (text.includes(value)) {
+                row.style.display = "";
+            } else {
+                row.style.display = "none";
+            }
+        });
+    });
+});
+</script>
 </html>

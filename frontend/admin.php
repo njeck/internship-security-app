@@ -1,5 +1,6 @@
 <?php
 session_start();
+
 if (empty($_SESSION['csrf_token'])) {
 	$_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
@@ -73,10 +74,25 @@ if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_tok
 
 		if ($i == 0) { $i++; continue; } // skip header
 
-		$matricule = $data[0];
-		$name = $data[1];
-		$amount = $data[2];
+		if (count($data) < 3) {
+    		continue;
+		}
 
+		$matricule = trim($data[0]);
+		$name = trim($data[1]);
+		$amount = trim($data[2]);
+		
+		if (!preg_match('/^[A-Za-z0-9]+$/', $matricule)) {
+			continue;
+		}
+
+		if (!preg_match('/^[A-Za-z ]+$/', $name)) {
+			continue;
+		}
+
+		if (!is_numeric($amount) || $amount <= 0) {
+			continue;
+		}
 		$stmt = $conn->prepare("INSERT INTO customers (payroll_id, matricule, name, amount, status) VALUES (?, ?, ?, ?, 'unpaid')");
 		$stmt->bind_param("issd", $payroll_id, $matricule, $name, $amount);
 		$stmt->execute();
@@ -102,7 +118,7 @@ if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_tok
 
 <div class="container">
 
-<h1>Welcome Admin <?php echo $user; ?></h1>
+<h1>Welcome Admin <?php echo htmlspecialchars($user); ?></h1>
 <p>Upload Payroll</p>
 <form method="POST" enctype="multipart/form-data">
 	<input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
