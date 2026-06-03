@@ -178,12 +178,26 @@ if ($payroll_id == 0) {
 	$total_paid = $conn->query("SELECT SUM(amount) as total FROM customers WHERE status='paid' AND payroll_id=$payroll_id")->fetch_assoc()['total'];
 	$total_unpaid = $conn->query("SELECT SUM(amount) as total FROM customers WHERE status='unpaid' AND payroll_id=$payroll_id")->fetch_assoc()['total'];
 };
+
+$total_paid_count = $conn->query("
+SELECT COUNT(*) as total
+FROM customers
+WHERE status='paid'
+")->fetch_assoc()['total'];
+
+$total_unpaid_count = $conn->query("
+SELECT COUNT(*) as total
+FROM customers
+WHERE status='unpaid'
+")->fetch_assoc()['total'];
 ?>
 
 <div class="container">
 
 <h3>Summary</h3>
 <p>Total Employees: <?php echo $total_users; ?></p>
+<p>Paid Employees: <?php echo $total_paid_count; ?></p>
+<p>Unpaid Employees: <?php echo $total_unpaid_count; ?></p>
 <p>Total Paid: <?php echo number_format($total_paid, 0, '.', ','); ?> FCFA</p>
 <p>Total Unpaid: <?php echo number_format($total_unpaid, 0, '.', ','); ?> FCFA</p>
 

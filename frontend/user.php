@@ -67,27 +67,29 @@ if (isset($_POST['pay'])) {
 	$customer_id = intval($_POST['customer_id']);
 	$user = $_SESSION['user'];
 
-	$stmt = $conn->prepare("UPDATE customers SET status='paid' WHERE id=?");
-	$stmt->bind_param("i", $customer_id);
-	$stmt->execute();
-
 	log_action($conn, $user, "Marked payment for customer ID: " . $customer_id);
 
-	$stmt = $conn->prepare("INSERT INTO payments (customer_id, paid_by, payment_date) VALUES (?, ?, NOW())");
+	$check = $conn->prepare("SELECT id FROM payments WHERE customer_id=?");
+	$check->bind_param("i", $customer_id);
+	$check->execute();
+	$res = $check->get_result();
 
-	if (!$stmt) {
-		die("Prepare failed: " . $conn->error);
+	if ($res->num_rows > 0) {
+		die("Payment already exists for this employee");
 	}
-
-$check = $conn->prepare("SELECT id FROM payments WHERE customer_id=?");
-$check->bind_param("i", $customer_id);
-$check->execute();
-$res = $check->get_result();
-if ($res->num_rows > 0) {
-	die("Payment already exists for this employee");
-}
-	$stmt->bind_param("is", $customer_id, $user);
-	$stmt->execute();
+	/* Insert payment record */
+	$paymentStmt = $conn->prepare(
+		"INSERT INTO payments (customer_id, paid_by, payment_date)
+		VALUES (?, ?, NOW())"
+	);
+	$paymentStmt->bind_param("is", $customer_id, $user);
+	$paymentStmt->execute();
+	/* Update customer status */
+	$updateStmt = $conn->prepare(
+		"UPDATE customers SET status='paid' WHERE id=?"
+	);
+	$updateStmt->bind_param("i", $customer_id);
+	$updateStmt->execute();
 
 	header("Location: user.php?payroll_id=".$_GET['payroll_id']);
 	exit();
@@ -170,7 +172,7 @@ if ($customers->num_rows == 0){
 	<th>Action</th>
 </tr>
 </thead>
-</tbody id="tableBody">
+<tbody id="tableBody">
 <?php
 if ($customers && $customers->num_rows > 0) {
 	while ($row = $customers->fetch_assoc()) {

@@ -78,6 +78,6 @@ form, table {
 }
 
 .go {
-	display:; flex;
-	jsutify-content: space-evenly;
+	display: flex;
+	justify-content: space-evenly;
 }
