@@ -79,5 +79,9 @@ form, table {
 
 .go {
 	display: flex;
-	justify-content: space-evenly;
+	justify-content: space-between;
+}
+
+.menu {
+	padding-top: 20px;
 }

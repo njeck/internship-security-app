@@ -118,14 +118,25 @@ $payroll = $conn->query("
 <html>
 <head>
 	<title>Payroll System</title>
-	<link rel="stylesheet" href="style.css">
+	<link rel="stylesheet" href="style.css?v=<?php echo time(); ?>">
 </head>
 <body>
 
 <div class="container">
-
+<div class="go">
 <h1>Welcome <?php echo htmlspecialchars($user); ?></h1>
+ 	<div class="menu">
+        <?php if ($_SESSION['role'] == 'admin') { ?>
+        <a href="admin.php"><button>Admin</button></a>
+        <?php } ?>
 
+        <a href="user.php"><button>User</button></a>
+
+        <?php if ($_SESSION['role'] == 'admin') { ?>
+        <a href="report.php"><button>Report</button></a>
+        <?php } ?>
+	</div>
+</div>
 <h2>Selct Payroll</h2>
 
 <form method="GET">
@@ -239,13 +250,6 @@ if ($customers && $customers->num_rows > 0) {
 </table>
 
 <?php } ?>
-
-<br><br>
-<?php
-if ($_SESSION['role'] == 'admin') {
-	echo '<a href="admin.php"><button>Go to Admin Page</button></a>';
-}
-?>
 
 <br><br>
 <form method="POST" action="logout.php">

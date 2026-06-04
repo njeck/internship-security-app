@@ -89,14 +89,19 @@ if (!$result) {
 <html>
 <head>
 	<title>Payroll System</title>
-	<link rel="stylesheet" href="style.css">
+	<link rel="stylesheet" href="style.css?v=<?php echo time(); ?>">
 </head>
 <body>
 
 <div class="container">
-
+<div class="go">
 <h2>Payment Report</h2>
-
+    <div class="menu">
+        <a href="admin.php"><button>Admin</button></a>
+        <a href="user.php"><button>User</button></a>
+        <a href="report.php"><button>Report</button></a>
+    </div>
+</div>
 <form method="POST">
 	<button name="export">Export to Excel</button>
 </form>
@@ -203,14 +208,10 @@ WHERE status='unpaid'
 
 </div>
 
-<br><br>
-<a href="admin.php">
-	<button>Back to Admin</button>
-</a>
-<br><br>
-<a href="logout.php">
-	<button style="background:8B1E1E;">Logout</button>
-</a>
+<br>
+<form method="POST" action="logout.php">
+	<button type="submit">Logout</button>
+</form>
 <br>
 
 </div>

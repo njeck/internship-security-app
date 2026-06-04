@@ -112,14 +112,20 @@ if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_tok
 <html>
 <head>
 	<title>Payroll System</title>
-	<link rel="stylesheet" href="style.css">
+	<link rel="stylesheet" href="style.css?v=<?php echo time(); ?>">
 </head>
 <body>
 
 <div class="container">
-
+<div class="go">
 <h1>Welcome Admin <?php echo htmlspecialchars($user); ?></h1>
-<p>Upload Payroll</p>
+	<div class="menu">
+        <a href="admin.php"><button>Admin</button></a>
+        <a href="user.php"><button>User</button></a>
+        <a href="report.php"><button>Report</button></a>
+    </div>
+</div>
+<h2>Upload Payroll</h2>
 <form method="POST" enctype="multipart/form-data">
 	<input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
 	<input type="text" name="payroll_name" placeholder="Payroll Name" required><br><br>
@@ -130,13 +136,6 @@ if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_tok
 
 
 <br>
-
-<div class="go">
-<a href="user.php"><button>Go to User Page</button></a><br><br>
-
-<a href="report.php"><button>Go to Report</button></a><br>
-</div>
-
 <form method="POST" action="logout.php">
 	<button type="submit">Logout</button>
 </form>
