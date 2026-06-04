@@ -1,53 +1,101 @@
 <?php
 session_start();
 
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-
+// Generate CSRF token
+if (empty($_SESSION['csrf_token'])) {
+	$_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
 require_once __DIR__ . '/../backend/database.php';
 
 $conn = db_connect();
 
 if (isset($_POST['login'])) {
 
-	$username = $_POST['username'];
-	$password = $_POST['password'];
+    $username = $_POST['username'];
+    $password = $_POST['password'];
 
-	echo "You entered: " . $username . "<br>";
+    //CHECK LOGIN ATTEMPTS
+    $stmt = $conn->prepare("SELECT attempts, last_attempt FROM login_attempts WHERE username=?");
+    $stmt->bind_param("s", $username);
+    $stmt->execute();
+    $result_attempt = $stmt->get_result();
 
-	$stmt = $conn->prepare("SELECT username, password, role FROM users WHERE username = ?");
-	$stmt->bind_param("s", $username);
-	$stmt->execute();
+    if ($result_attempt->num_rows > 0) {
+        $data = $result_attempt->fetch_assoc();
 
-	$result = $stmt->get_result();
+        if ($data['attempts'] >= 5 && strtotime($data['last_attempt']) > time() - 300) {
+            die("Account locked. Try again in 5 minutes.");
+        }
+    }
 
-	if ($result->num_rows > 0) {
-		$row = $result->fetch_assoc();
+    //CSRF CHECK
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        die("Invalid CSRF token");
+    }
 
-		if (password_verify($password, $row['password'])) {
+    //CHECK USER
+    $stmt = $conn->prepare("SELECT username, password, role FROM users WHERE username = ?");
+    $stmt->bind_param("s", $username);
+    $stmt->execute();
+    $result = $stmt->get_result();
 
-			$_SESSION['user'] = $row['username'];
-			$_SESSION['role'] = $row['role'];
+    if ($result->num_rows > 0) {
 
-			if ($row['role'] == 'admin') {
+        $row = $result->fetch_assoc();
 
-			if (isset($_GET['redirect']) && $_GET['redirect'] == 'report'){
-				header("Location: report.php");
-			} else {
-				header("Location: admin.php");
-			}
-			} else {
-				header("Location: user.php");
-			}
-			exit();
+        if (password_verify($password, $row['password'])) {
+				log_action($conn, $username, "Login successful");
+            //RESET ATTEMPTS
+            $stmt = $conn->prepare("DELETE FROM login_attempts WHERE username=?");
+            $stmt->bind_param("s", $username);
+            $stmt->execute();
 
-		} else {
-			echo "Wrong password!";
-		}
+            session_regenerate_id(true);
 
-	} else {
-		echo "User not found!";
-	}
+            $_SESSION['user'] = $row['username'];
+            $_SESSION['role'] = $row['role'];
+            $_SESSION['last_activity'] = time();
+
+            if ($row['role'] === 'admin') {
+                header("Location: admin.php");
+            } else {
+                header("Location: user.php");
+            }
+            exit();
+
+        } else {
+
+            //WRONG PASSWORD → INCREASE ATTEMPTS
+            $stmt = $conn->prepare("
+                INSERT INTO login_attempts (username, attempts)
+                VALUES (?, 1)
+                ON DUPLICATE KEY UPDATE
+                    attempts = attempts + 1,
+                    last_attempt = CURRENT_TIMESTAMP
+            ");
+            $stmt->bind_param("s", $username);
+            $stmt->execute();
+
+			log_action($conn, $username, "Failed login - wrong password");
+            echo "Wrong password!";
+        }
+
+    } else {
+
+        //USER NOT FOUND → ALSO TRACK
+        $stmt = $conn->prepare("
+            INSERT INTO login_attempts (username, attempts)
+            VALUES (?, 1)
+            ON DUPLICATE KEY UPDATE
+                attempts = attempts + 1,
+                last_attempt = CURRENT_TIMESTAMP
+        ");
+        $stmt->bind_param("s", $username);
+        $stmt->execute();
+
+		log_action($conn, $username, "Failed login - user not found");
+        echo "User not found!";
+    }
 }
 ?>
 
@@ -105,6 +153,7 @@ button:hover {
 <h2>Login</h2>
 
 <form method="POST">
+	<input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
 	<input type="text" name="username" placeholder="Username" required><br><br>
 	<input type="password" name="password" placeholder="Password" required><br><br>
 	<button type="submit" name="login">Login</button>

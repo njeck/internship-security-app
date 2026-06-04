@@ -1,20 +1,57 @@
 <?php
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-
 session_start();
 
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    if (
+        !isset($_POST['csrf_token']) ||
+        $_POST['csrf_token'] !== $_SESSION['csrf_token']
+    ) {
+        die("Invalid CSRF token");
+    }
+
+}
+// Session timeout after 10 minutes
+$timeout_duration = 600;
+if (isset($_SESSION['last_activity'])) {
+	if ((time() - $_SESSION['last_activity']) > $timeout_duration) {
+
+		session_unset();
+		session_destroy();
+
+		header("Location: login.php?timeout=1");
+		exit();
+	}
+}
+// Update last activity time
+$_SESSION['last_activity'] = time();
+
+if (
+    !isset($_SESSION['user']) ||
+    !isset($_SESSION['role'])
+) {
+    header("Location: login.php");
+    exit();
+}
 require_once __DIR__ . '/../backend/database.php';
 
 $conn = db_connect();
 
 
-if (isset($_GET['undo'])) {
-	$customer_id = intval($_GET['undo']);
+if (isset($_POST['undo'])) {
+	$customer_id = intval($_POST['customer_id']);
 	$payroll_id = intval($_GET['payroll_id']);
 
-	$conn->query("UPDATE customers SET status='unpaid' WHERE id=$customer_id");
-	$conn->query("DELETE FROM payments WHERE customer_id=$customer_id");
+	$stmt = $conn->prepare("UPDATE customers SET status='unpaid' WHERE id=?");
+	$stmt->bind_param("i", $customer_id);
+	$stmt->execute();
+	log_action($conn, $_SESSION['user'], "Undo payment for customer ID: " . $customer_id);
+	$stmt = $conn->prepare("DELETE FROM payments WHERE customer_id=?");
+	$stmt->bind_param("i", $customer_id);
+	$stmt->execute();
 
 	header("Location: user.php?payroll_id=" . $payroll_id);
 	exit();
@@ -25,26 +62,34 @@ $payroll_id = isset($_GET['payroll_id']) ? intval($_GET['payroll_id']) : 0;
 
 $search = isset($_GET['search']) ? $_GET['search'] : '';
 
-if (isset($_GET['pay'])) {
+if (isset($_POST['pay'])) {
 
-	$customer_id = intval($_GET['pay']);
+	$customer_id = intval($_POST['customer_id']);
 	$user = $_SESSION['user'];
 
-	$conn->query("UPDATE customers SET status='paid' WHERE id=$customer_id");
+	log_action($conn, $user, "Marked payment for customer ID: " . $customer_id);
 
-	$stmt = $conn->prepare("INSERT INTO payments (customer_id, paid_by, payment_date) VALUES (?, ?, NOW())");
+	$check = $conn->prepare("SELECT id FROM payments WHERE customer_id=?");
+	$check->bind_param("i", $customer_id);
+	$check->execute();
+	$res = $check->get_result();
 
-	if (!$stmt) {
-		die("Prepare failed: " . $conn->error);
+	if ($res->num_rows > 0) {
+		die("Payment already exists for this employee");
 	}
-
-$check = $conn->prepare("SELECT id FROM payments WHERE customer_id=?");
-$check->bind_param("i", $customer_id);
-$check->execute();
-$res = $check->get_result();
-
-	$stmt->bind_param("is", $customer_id, $user);
-	$stmt->execute();
+	/* Insert payment record */
+	$paymentStmt = $conn->prepare(
+		"INSERT INTO payments (customer_id, paid_by, payment_date)
+		VALUES (?, ?, NOW())"
+	);
+	$paymentStmt->bind_param("is", $customer_id, $user);
+	$paymentStmt->execute();
+	/* Update customer status */
+	$updateStmt = $conn->prepare(
+		"UPDATE customers SET status='paid' WHERE id=?"
+	);
+	$updateStmt->bind_param("i", $customer_id);
+	$updateStmt->execute();
 
 	header("Location: user.php?payroll_id=".$_GET['payroll_id']);
 	exit();
@@ -73,14 +118,25 @@ $payroll = $conn->query("
 <html>
 <head>
 	<title>Payroll System</title>
-	<link rel="stylesheet" href="style.css">
+	<link rel="stylesheet" href="style.css?v=<?php echo time(); ?>">
 </head>
 <body>
 
 <div class="container">
+<div class="go">
+<h1>Welcome <?php echo htmlspecialchars($user); ?></h1>
+ 	<div class="menu">
+        <?php if ($_SESSION['role'] == 'admin') { ?>
+        <a href="admin.php"><button>Admin</button></a>
+        <?php } ?>
 
-<h1>Welcome <?php echo $user; ?></h1>
+        <a href="user.php"><button>User</button></a>
 
+        <?php if ($_SESSION['role'] == 'admin') { ?>
+        <a href="report.php"><button>Report</button></a>
+        <?php } ?>
+	</div>
+</div>
 <h2>Selct Payroll</h2>
 
 <form method="GET">
@@ -127,26 +183,56 @@ if ($customers->num_rows == 0){
 	<th>Action</th>
 </tr>
 </thead>
-</tbody id="tableBody">
+<tbody id="tableBody">
 <?php
 if ($customers && $customers->num_rows > 0) {
 	while ($row = $customers->fetch_assoc()) {
 ?>
 <tr>
-	<td><?php echo $row['matricule']; ?></td>
-	<td><?php echo $row['name']; ?></td>
-	<td><?php echo $row['amount']; ?></td>
-	<td><?php echo $row['status']; ?></td>
+	<td><?php echo htmlspecialchars($row['matricule']); ?></td>
+	<td><?php echo htmlspecialchars($row['name']); ?></td>
+	<td><?php echo htmlspecialchars($row['amount']); ?></td>
+	<td><?php echo htmlspecialchars($row['status']); ?></td>
  	<td>
 	<?php if ($row['status'] == 'unpaid') { ?>
-		<a href="?pay=<?php echo $row['id']; ?>&payroll_id=<?php echo $payroll_id ?>">
-			<button>PAY</button>
-		</a>
+		
+		<form method="POST">
+		<input type="hidden"
+			name="csrf_token"
+			value="<?php echo $_SESSION['csrf_token']; ?>">
+		<input type="hidden"
+			name="customer_id"
+			value="<?php echo $row['id']; ?>">
+		<input type="hidden"
+			name="payroll_id"
+			value="<?php echo $payroll_id; ?>">
+		<button type="submit" name="pay">
+			PAY
+		</button>
+		</form>
+
 	<?php } else { ?>
 		<?php if ($_SESSION['role'] == 'admin') { ?>
-		<a href="?undo=<?php echo $row['id']; ?>&payroll_id=<?php echo $payroll_id; ?>" onclick="return confirm('Undo this payment?')">
-			<button style="background:red;">Undo</button>
-		</a>
+		
+		<form method="POST">
+		<input type="hidden"
+			name="csrf_token"
+			value="<?php echo $_SESSION['csrf_token']; ?>">
+		<input type="hidden"
+			name="customer_id"
+			value="<?php echo $row['id']; ?>">
+		<input type="hidden"
+			name="payroll_id"
+			value="<?php echo $payroll_id; ?>">
+		<button
+			type="submit"
+			name="undo"
+			style="background:red;"
+			onclick="return confirm('Undo this payment?')">
+			Undo
+		</button>
+		</form>
+
 	<?php } else { ?>
 		<span style="color:gray;">Paid</span>
 	<?php } ?>
@@ -166,44 +252,30 @@ if ($customers && $customers->num_rows > 0) {
 <?php } ?>
 
 <br><br>
-<?php
-if ($_SESSION['role'] == 'admin') {
-	echo '<a href="admin.php"><button>Go to Admin Page</button></a>';
-}
-?>
-
-<br><br>
 <form method="POST" action="logout.php">
 	<button type="submit">Logout</button>
 </form>
 
 </div>
-<script>
-window.onload = function () {
-	let searchInput = document.getElementById("search");
-	if (!searchInput) {
-		console.log("Search input NOT found");
-		return;
-	}
-searchInput.addEventListener("keyup", function () {
-
-	let value = this.value.toLowerCase();
-	let rows = document.querySelectorAll("#tableBody tr");
-
-	row.forEach(function(row) {
-		let text = row.textContent.toLowerCase();
-
-		row.style.display = text.includes(value) ? "" : "none";
-	});
-)};
-};
-</script>
-<script>
-let row = document.querySelector("tr[style='']");
-let (row) {
-	row.scrollIntoview({ behavior: "smooth", block: "center"});
-}
-</script>
-
 </body>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const searchInput = document.getElementById("search");
+    if (!searchInput) {
+        return;
+    }
+    searchInput.addEventListener("keyup", function () {
+        const value = this.value.toLowerCase();
+        const rows = document.querySelectorAll("#tableBody tr");
+        rows.forEach(function(row) {
+            const text = row.textContent.toLowerCase();
+            if (text.includes(value)) {
+                row.style.display = "";
+            } else {
+                row.style.display = "none";
+            }
+        });
+    });
+});
+</script>
 </html>

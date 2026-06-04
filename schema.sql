@@ -40,3 +40,17 @@ CREATE TABLE IF NOT EXISTS payments (
 	payment_date DATETIME NOT NULL,
 	FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
 );
+
+CREATE TABLE audit_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(255),
+    action TEXT,
+    ip_address VARCHAR(45),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE login_attempts (
+    username VARCHAR(255) PRIMARY KEY,
+    attempts INT DEFAULT 0,
+    last_attempt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

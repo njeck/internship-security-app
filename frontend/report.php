@@ -1,5 +1,21 @@
 <?php
 session_start();
+
+// Session timeout after 10 minutes
+$timeout_duration = 600;
+if (isset($_SESSION['last_activity'])) {
+	if ((time() - $_SESSION['last_activity']) > $timeout_duration) {
+
+		session_unset();
+		session_destroy();
+
+		header("Location: login.php?timeout=1");
+		exit();
+	}
+}
+// Update last activity time
+$_SESSION['last_activity'] = time();
+
 require_once __DIR__ . '/../backend/database.php';
 
 if (!isset($_SESSION['user'])) {
@@ -18,6 +34,7 @@ $payroll_id = isset($_GET['payroll_id']) ? intval($_GET['payroll_id']) : 0;
 $result = $conn->query("SELECT id, payroll_name FROM payrolls");
 
 if (isset($_POST['export'])) {
+	log_action($conn, $_SESSION['user'], "Exported payroll report");
 	header("Content-Type: application/vnd.ms-excel");
 	header("Content-Disposition: attachment; filename=report.xls");
 
@@ -72,14 +89,19 @@ if (!$result) {
 <html>
 <head>
 	<title>Payroll System</title>
-	<link rel="stylesheet" href="style.css">
+	<link rel="stylesheet" href="style.css?v=<?php echo time(); ?>">
 </head>
 <body>
 
 <div class="container">
-
+<div class="go">
 <h2>Payment Report</h2>
-
+    <div class="menu">
+        <a href="admin.php"><button>Admin</button></a>
+        <a href="user.php"><button>User</button></a>
+        <a href="report.php"><button>Report</button></a>
+    </div>
+</div>
 <form method="POST">
 	<button name="export">Export to Excel</button>
 </form>
@@ -112,11 +134,11 @@ if (!$result) {
 </tr>
 <?php while($row = $result->fetch_assoc()) { ?>
 <tr>
-	<td><?php echo $row['matricule']; ?></td>
-	<td><?php echo $row['name']; ?></td>
-	<td><?php echo $row['amount']; ?></td>
-	<td><?php echo $row['status']; ?></td>
-	<td><?php echo $row['paid_by']; ?></td>
+	<td><?php echo htmlspecialchars($row['matricule']); ?></td>
+	<td><?php echo htmlspecialchars($row['name']); ?></td>
+	<td><?php echo htmlspecialchars($row['amount']); ?></td>
+	<td><?php echo htmlspecialchars($row['status']); ?></td>
+	<td><?php echo htmlspecialchars($row['paid_by']); ?></td>
 	<td>
 	<?php
 	echo !empty($row['payment_date']) ? $row['payment_date'] : '-';
@@ -161,25 +183,35 @@ if ($payroll_id == 0) {
 	$total_paid = $conn->query("SELECT SUM(amount) as total FROM customers WHERE status='paid' AND payroll_id=$payroll_id")->fetch_assoc()['total'];
 	$total_unpaid = $conn->query("SELECT SUM(amount) as total FROM customers WHERE status='unpaid' AND payroll_id=$payroll_id")->fetch_assoc()['total'];
 };
+
+$total_paid_count = $conn->query("
+SELECT COUNT(*) as total
+FROM customers
+WHERE status='paid'
+")->fetch_assoc()['total'];
+
+$total_unpaid_count = $conn->query("
+SELECT COUNT(*) as total
+FROM customers
+WHERE status='unpaid'
+")->fetch_assoc()['total'];
 ?>
 
 <div class="container">
 
 <h3>Summary</h3>
 <p>Total Employees: <?php echo $total_users; ?></p>
+<p>Paid Employees: <?php echo $total_paid_count; ?></p>
+<p>Unpaid Employees: <?php echo $total_unpaid_count; ?></p>
 <p>Total Paid: <?php echo number_format($total_paid, 0, '.', ','); ?> FCFA</p>
 <p>Total Unpaid: <?php echo number_format($total_unpaid, 0, '.', ','); ?> FCFA</p>
 
 </div>
 
-<br><br>
-<a href="admin.php">
-	<button>Back to Admin</button>
-</a>
-<br><br>
-<a href="logout.php">
-	<button style="background:8B1E1E;">Logout</button>
-</a>
+<br>
+<form method="POST" action="logout.php">
+	<button type="submit">Logout</button>
+</form>
 <br>
 
 </div>
